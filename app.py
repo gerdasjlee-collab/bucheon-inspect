@@ -184,7 +184,7 @@ for p, tab in zip(cl["parts"], tabs):
                 for it in s_["items"]:
                     k = CK.key(p["name"], it); opts = CK.options(it)
                     st.markdown(f"**{it['no']}. {it['text']}**")
-                    st.caption(f"근거: {it['basis'] or '권고'} · 배점 {'-'.join(map(str, it['scores']))}")
+                    st.caption(f"근거: {it['basis'] or '권고'} · {CK.guide(it)}")
                     wkey = f"r::{cid}::{k}"
                     if scores.get(k) in opts:
                         S[wkey] = scores[k]
@@ -206,7 +206,7 @@ for p, tab in zip(cl["parts"], tabs):
                                 column_config={"구분": st.column_config.TextColumn(width="small", disabled=True), "번호": st.column_config.TextColumn(width="small", disabled=True),
                                                "항목": st.column_config.TextColumn(width="large", disabled=True), "근거": st.column_config.TextColumn(width="medium", disabled=True),
                                                "배점": st.column_config.TextColumn(width="small", disabled=True),
-                                               "점수": st.column_config.SelectboxColumn("점수", options=all_opts, width="medium", help="문항 배점에 맞는 값을 고르세요"),
+                                               "점수": st.column_config.SelectboxColumn("점수", options=all_opts, width="small", help="'배점' 칸에 있는 숫자 중 하나를 고르세요 (예: 배점 2-0이면 2점 또는 0점). 해당 없으면 '해당없음'"),
                                                "비고": st.column_config.TextColumn(width="large")})
             for r_, (_, e) in zip(rows, ed.iterrows()):
                 v = e["점수"]
@@ -214,7 +214,7 @@ for p, tab in zip(cl["parts"], tabs):
                     if v in r_["_opts"]:
                         scores[r_["_k"]] = v
                     else:
-                        st.warning(f"{r_['번호']}번: '{v}'는 이 문항 배점({r_['배점']})에 없는 값입니다.")
+                        st.warning(f"{r_['번호']}번: 배점이 {r_['배점']}인 문항입니다. {' / '.join(r_['_opts'])} 중에서 고르세요.")
                 notes[r_["_k"]] = str(e["비고"]) if pd.notna(e["비고"]) else ""
 
 S.setdefault("yn", {})

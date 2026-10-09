@@ -36,18 +36,17 @@ def key(part: str, it: dict) -> str:
 
 
 def options(it: dict) -> list:
-    """점수 선택지 문자열. 예: ['4점 (모두 충족)', '2점 (일부)', '0점 (미충족)', '해당없음']"""
+    """점수 선택지. 예: ['4점', '2점', '0점', '해당없음'] — 문항 배점 그대로."""
+    return [f"{v}점" for v in it["scores"]] + [NA]
+
+
+def guide(it: dict) -> str:
+    """배점 설명: 4-2-0 → '4점 모두 충족 · 2점 일부 충족 · 0점 미충족'"""
     sc = it["scores"]
-    labels = []
-    for i, v in enumerate(sc):
-        if len(sc) == 2:
-            tag = "충족" if i == 0 else "미충족"
-        else:
-            tag = "모두 충족" if i == 0 else ("일부 충족" if i < len(sc) - 1 else "미충족")
-        labels.append(f"{v}점 ({tag})")
-    if it.get("na") or True:  # 모든 문항에 '해당없음' 허용(점검자 판단) — 만점에서 제외
-        labels.append(NA)
-    return labels
+    if len(sc) == 2:
+        return f"{sc[0]}점 충족 · 0점 미충족"
+    mids = " · ".join(f"{v}점 일부 충족" for v in sc[1:-1])
+    return f"{sc[0]}점 모두 충족 · {mids} · 0점 미충족"
 
 
 def value_of(label: str):
