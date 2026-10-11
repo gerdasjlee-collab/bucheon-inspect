@@ -94,7 +94,7 @@ with st.sidebar:
             L.delete_draft(LOG_URL, opts[pick]["key"]); S.pop("drafts"); st.rerun()
     st.divider()
     if st.button("🆕 새 점검 시작 (입력 초기화)", use_container_width=True):
-        for k in ("scores", "notes", "info", "draft", "cid", "draft_key", "summ", "yn", "rid"):
+        for k in ("scores", "notes", "info", "draft", "cid", "draft_key", "summ", "yn", "rid", "advice_topic"):
             S.pop(k, None)
         st.rerun()
 
@@ -123,7 +123,8 @@ with st.expander("시설 기본 정보 (서식 머리 부분)", expanded=not inf
     visit = k3.number_input("방문회차", 1, 20, int(info.get("방문회차", 1) or 1))
     k4, k5, k6, k7 = st.columns(4)
     date = k4.date_input("점검일자", _dt.date.fromisoformat(info["점검일자"]) if info.get("점검일자") else KST().date())
-    kind = k5.selectbox("구분", ["정규", "기타"], index=["정규", "기타"].index(info.get("구분", "정규")))
+    _kinds = ["정규", "수시", "기타"]
+    kind = k5.selectbox("구분", _kinds, index=_kinds.index(info.get("구분", "정규")) if info.get("구분") in _kinds else 0)
     mem = k6.selectbox("회원유형", ["일반", "기본", "해당없음"], index=["일반", "기본", "해당없음"].index(info.get("회원유형", "일반")))
     grade = k7.selectbox("회원등급", ["열매", "새싹", "해당없음"], index=["열매", "새싹", "해당없음"].index(info.get("회원등급", "열매")))
     k8, k9, k10, k11 = st.columns(4)
@@ -138,21 +139,40 @@ with st.expander("시설 기본 정보 (서식 머리 부분)", expanded=not inf
     serve = k15.selectbox("배식형태", ["교실배식", "식당배식", "식당+교실배식", "생활실(침실)배식", "기타"], index=["교실배식", "식당배식", "식당+교실배식", "생활실(침실)배식", "기타"].index(info.get("배식형태", "교실배식")))
     k16, k17 = st.columns(2)
     feed = k16.selectbox("급식·운영 형태", ["직접조리(직영)", "직접조리(위탁)", "외부조리(도시락/배달)", "가정형·경로당", "기타"], index=["직접조리(직영)", "직접조리(위탁)", "외부조리(도시락/배달)", "가정형·경로당", "기타"].index(info.get("급식형태", "직접조리(직영)")))
-    interviewee = k17.text_input("면담자 (기관)", info.get("면담자", ""), placeholder="예: 원장 ○○○ / 조리원 ○○○")
+    interviewee = k17.text_input("면담자 (기관) *", info.get("면담자", ""), placeholder="예: 원장, 조리원")
+    st.markdown("**방문 정보 (결과지 머리 표)**")
+    v1, v2, v3 = st.columns([2, 1, 1])
+    visitors = v1.text_input("방문자 (센터직원, 여러 명이면 쉼표)", info.get("방문자", USER["name"]), placeholder="예: 김연우, 이지은")
+
+    def _t(s, default):
+        try:
+            return _dt.time.fromisoformat(s)
+        except Exception:  # noqa: BLE001
+            return default
+
+    t_start = v2.time_input("방문 시작", _t(info.get("방문시작", ""), _dt.time(10, 0)), step=600)
+    t_end = v3.time_input("방문 종료", _t(info.get("방문종료", ""), _dt.time(10, 30)), step=600)
     S.info = dict(info, 시설군=group, 시설명=org.strip(), 주소=addr.strip(), 방문회차=int(visit), 점검일자=date.isoformat(), 구분=kind, 회원유형=mem, 회원등급=grade, 세부유형=sub.strip(),
-                  현원=int(cur), **{"1회최대급식인원": int(mx)}, 종사자=staff.strip(), 영양사근무=diet, 용수=water, 제공식수=drink, 배식형태=serve, 급식형태=feed, 면담자=interviewee.strip(), 점검자=USER["name"])
+                  현원=int(cur), **{"1회최대급식인원": int(mx)}, 종사자=staff.strip(), 영양사근무=diet, 용수=water, 제공식수=drink, 배식형태=serve, 급식형태=feed, 면담자=interviewee.strip(),
+                  점검자=USER["name"], 방문자=visitors.strip() or USER["name"], 방문시작=t_start.strftime("%H:%M"), 방문종료=t_end.strftime("%H:%M"), 점검유형=R._type_of(cl))
     info = S.info
     # 이전 방문 자동 조회
     if LOG_URL and org.strip() and st.button("🔎 이 시설의 이전 방문 기록 불러오기"):
         prev = L.previous_visit(LOG_URL, org)
         if prev:
-            S.info["이전지도사항"] = str(prev.get("이번지도사항", "")); S.info["이전점검일"] = str(prev.get("점검일자", "")); S.info["이전득점률"] = prev.get("득점률")
+            prev_lines = [str(prev.get("이번지도사항", "")), str(prev.get("칭찬", ""))]
+            S.info["이전지도사항"] = "\n".join(x for x in prev_lines if x.strip()); S.info["이전점검일"] = str(prev.get("점검일자", "")); S.info["이전득점률"] = prev.get("득점률")
+            S.info["이전방문표기"] = f"{str(prev.get('점검일자',''))[:4]}년 {prev.get('방문회차','')}차"
             st.success(f"이전 방문 {prev.get('점검일자')} · {prev.get('체크리스트')} · 득점률 {prev.get('득점률')}% — 지도사항을 아래에 채웠습니다.")
         else:
             st.info("이전 기록이 없습니다 (첫 방문).")
-    p1, p2 = st.columns([3, 1])
-    S.info["이전지도사항"] = p1.text_area("이전 방문 시 지도사항", info.get("이전지도사항", ""), height=80)
-    S.info["이전개선여부"] = p2.selectbox("이전 지도사항 개선 여부", ["해당없음(첫 방문)", "개선 완료", "일부 개선", "미개선"], index=["해당없음(첫 방문)", "개선 완료", "일부 개선", "미개선"].index(info.get("이전개선여부", "해당없음(첫 방문)")))
+    p0, p1 = st.columns([1, 3])
+    S.info["이전방문표기"] = p0.text_input("이전 방문 표기", info.get("이전방문표기", ""), placeholder="예: 2025년 2차", help="결과지의 '이전 방문 시 지도사항' 칸 첫 줄에 [2025년 2차]처럼 붙습니다")
+    S.info["이전지도사항"] = p1.text_area("이전 방문 시 지도사항 (한 줄에 하나)", info.get("이전지도사항", ""), height=90, placeholder="종이 기록을 옮기거나, 위 '이전 방문 기록 불러오기'로 자동 입력")
+    p2, p3 = st.columns([1, 3])
+    _imp = ["해당없음(첫 방문)", "개선 완료", "일부 개선", "미개선"]
+    S.info["이전개선여부"] = p2.selectbox("이전 지도사항 개선 여부", _imp, index=_imp.index(info.get("이전개선여부", "해당없음(첫 방문)")))
+    S.info["이전개선메모"] = p3.text_input("개선 여부 문안 (결과지에 들어갈 문장)", info.get("이전개선메모", ""), placeholder="예: 1. 지도사항을 확인해 주시기 바랍니다. / 1. 개선 완료 확인")
     info = S.info
 
 if not info.get("시설명"):
@@ -242,7 +262,8 @@ if defs:
     st.dataframe(pd.DataFrame(defs)[["no", "section", "text", "got", "max", "basis", "note"]].rename(columns={"no": "번호", "section": "구분", "text": "항목", "got": "점수", "max": "배점", "basis": "근거", "note": "비고"}), hide_index=True, use_container_width=True)
 
 # ── 4. 통지문 ──
-st.markdown("### 4️⃣ 지도 결과 통지문 (칭찬 + 개선사항)")
+st.markdown("### 4️⃣ 순회방문 결과지 — 이번 방문 시 지도사항 · 영양사의 당부")
+st.caption("센터 「순회방문 결과지」 서식 그대로 나갑니다: 머리 표 → 지도결과(요약) → 영양사의 당부(협의사항) → (붙임) 점검표")
 b1, b2 = st.columns([1, 3])
 tone = b2.selectbox("어조", ["따뜻하고 격려하는", "정중하고 공식적인", "간결한"], label_visibility="collapsed")
 if b1.button("🤖 AI 초안 만들기" if GEMINI_KEY else "📄 서식 초안 만들기", type="primary", use_container_width=True):
@@ -250,26 +271,40 @@ if b1.button("🤖 AI 초안 만들기" if GEMINI_KEY else "📄 서식 초안 �
         S.draft = R.ai_draft(GEMINI_KEY, info, cl, summ, defs, goods, tone) if GEMINI_KEY else R.template_draft(info, cl, summ, defs, goods)
 d = S.draft
 if d:
-    st.caption("초안입니다. 고친 뒤 아래에서 확정하세요.")
-    d["총평"] = st.text_area("총평", d.get("총평", ""), height=80)
-    d["칭찬"] = [x for x in st.text_area("👍 잘하고 계신 점 (한 줄에 하나)", "\n".join(d.get("칭찬", [])), height=140).splitlines() if x.strip()]
-    d["개선"] = [x for x in st.text_area("🔧 개선이 필요한 사항 (한 줄에 하나)", "\n".join(d.get("개선", [])), height=200).splitlines() if x.strip()]
-    d["다음확인"] = [x for x in st.text_area("🔁 다음 방문 시 확인 사항", "\n".join(d.get("다음확인", [])), height=100).splitlines() if x.strip()]
+    st.caption("초안입니다. 고친 뒤 아래에서 확정하세요. 개선사항과 칭찬은 결과지의 '이번 방문 시 지도사항' 한 칸에 번호가 이어서 매겨집니다.")
+    d["개선"] = [x for x in st.text_area("🔧 이번 방문 시 지도사항 — 개선 (한 줄에 하나, '~해 주시기 바랍니다. (품목)')", "\n".join(d.get("개선", [])), height=180).splitlines() if x.strip()]
+    d["칭찬"] = [x for x in st.text_area("👍 이번 방문 시 지도사항 — 칭찬·격려 (한 줄에 하나)", "\n".join(d.get("칭찬", [])), height=90).splitlines() if x.strip()]
+    st.markdown("**💬 영양사의 당부 (협의사항)**")
+    a1, a2 = st.columns([1, 3])
+    topics = list(R.ADVICE)
+    cur_t = S.get("advice_topic", topics[-1] if d.get("당부") else topics[0])
+    topic = a1.selectbox("주제 (센터 문안 라이브러리)", topics, index=topics.index(cur_t) if cur_t in topics else 0, help="고르면 센터에서 실제 쓰던 문안이 들어갑니다. 그대로 쓰거나 고치세요. AI 초안이 만든 당부는 '직접 입력'에 있습니다.")
+    if topic != S.get("advice_topic"):
+        S["advice_topic"] = topic
+        if topic != "직접 입력":
+            d["당부"] = R.ADVICE[topic]
+    d["당부"] = a2.text_area("당부 문안", d.get("당부", ""), height=260, label_visibility="collapsed")
+    d["다음확인"] = [x for x in st.text_area("🔁 다음 방문 시 확인 사항 (내부 기록용 · 결과지에는 안 나감)", "\n".join(d.get("다음확인", [])), height=80).splitlines() if x.strip()]
     S.draft = d
+    with st.expander("👀 결과지 미리보기 (지도결과 요약 칸)"):
+        st.markdown(f"**이전 방문 시 지도사항**  \n" + (f"[{info.get('이전방문표기','')}]  \n" if info.get("이전방문표기") and info.get("이전지도사항") else "") + (info.get("이전지도사항") or "해당 없음 (첫 방문)").replace("\n", "  \n"))
+        st.markdown(f"**이전 방문 시 지도사항 개선 여부**  \n{info.get('이전개선메모') or info.get('이전개선여부','')}")
+        st.markdown("**이번 방문 시 지도사항**  \n" + R._numbered(R.guidance_lines(d)).replace("\n\n", "  \n"))
 
 # ── 5. 확정·내려받기 ──
 st.markdown("### 5️⃣ 확정 · 내려받기")
-ready = done == len(flat) and bool(d)
+ready = done == len(flat) and bool(d) and bool(info.get("면담자"))
 if not ready:
-    st.caption("모든 문항 입력 + 통지문 초안 생성 후 확정할 수 있습니다.")
+    st.caption("모든 문항 입력 + 면담자 입력 + 결과지 초안 생성 후 확정할 수 있습니다.")
+attach = st.checkbox("워드 파일에 '붙임. 점검표' 포함", value=True, help="끄면 센터 결과지(머리 표·지도결과 요약·당부)만 2쪽 내외로 나갑니다")
 c1, c2, c3 = st.columns(3)
 if c1.button("✅ 점검 확정 (구글 시트 기록)", type="primary", disabled=not ready, use_container_width=True):
     rid = S.get("rid") or uuid.uuid4().hex[:10]
     row = {"기록ID": rid, "점검일자": info["점검일자"], "시설군": group, "체크리스트": cl["name"], "시설명": info["시설명"], "주소": info.get("주소", ""), "방문회차": info["방문회차"], "구분": info["구분"],
            "세부유형": info.get("세부유형", ""), "현원": info.get("현원", ""), "점검자": USER["name"], "면담자": info.get("면담자", ""), "총점": summ["got"], "만점": summ["app_max"], "득점률": summ["pct"],
            "영역별점수": " · ".join(f"{p['name']} {p['got']}/{p['app_max']}" for p in summ["parts"]), "감점문항수": len(defs), "감점문항": ", ".join(x["no"] for x in defs),
-           "이전지도사항": info.get("이전지도사항", ""), "이전개선여부": info.get("이전개선여부", ""), "이번지도사항": "\n".join(d.get("개선", [])), "칭찬": "\n".join(d.get("칭찬", [])),
-           "다음확인": "\n".join(d.get("다음확인", [])), "총평": d.get("총평", ""), "필수확인YN": ", ".join(f"{k.split('|')[1]}:{v}" for k, v in S.get("yn", {}).items()), "저장일시": KST().strftime("%Y-%m-%d %H:%M")}
+           "이전지도사항": info.get("이전지도사항", ""), "이전개선여부": (info.get("이전개선메모") or info.get("이전개선여부", "")), "이번지도사항": "\n".join(d.get("개선", [])), "칭찬": "\n".join(d.get("칭찬", [])),
+           "다음확인": "\n".join(d.get("다음확인", [])), "총평": (d.get("총평", "") + (f"\n[당부] {d['당부'][:60]}…" if d.get("당부") else "")), "필수확인YN": ", ".join(f"{k.split('|')[1]}:{v}" for k, v in S.get("yn", {}).items()), "저장일시": KST().strftime("%Y-%m-%d %H:%M")}
     items = [{"기록ID": rid, "점검일자": info["점검일자"], "시설명": info["시설명"], "체크리스트": cl["name"], "영역": p_, "구분": s_, "번호": it["no"], "항목": it["text"], "배점": it["scores"][0],
               "점수": ("" if scores.get(CK.key(p_, it)) == CK.NA else CK.value_of(scores.get(CK.key(p_, it)))), "비고": notes.get(CK.key(p_, it), "")} for p_, s_, it in flat]
     if LOG_URL:
@@ -287,7 +322,7 @@ if c1.button("✅ 점검 확정 (구글 시트 기록)", type="primary", disable
         st.info("LOG_WEBHOOK_URL이 없어 시트에는 저장하지 않았습니다.")
 if d:
     fname = f"{info['시설명']}_{info['점검일자']}_{cl['name'][:12]}"
-    c2.download_button("⬇️ 통지문 + 점검표 (워드)", R.to_docx(dict(info, 필수확인=S.get("yn", {})), cl, summ, d, defs, scores, notes), f"지도결과통지_{fname}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+    c2.download_button("⬇️ 순회방문 결과지 (워드)", R.to_docx(dict(info, 필수확인=S.get("yn", {})), cl, summ, d, defs, scores, notes, attach_sheet=attach), f"순회방문결과지_{fname}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
     c3.download_button("⬇️ 점검표 (엑셀)", R.to_xlsx(info, cl, summ, scores, notes), f"점검표_{fname}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
 st.divider()
